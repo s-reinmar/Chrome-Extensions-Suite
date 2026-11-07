@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pobieracz",
-  "version": "1.2",
+  "version": "1.3",
   "description": "Wtyczka do pobierania zdjęć z aktywnych kart i ramek",
   "permissions": [
     "activeTab",

@@ -12,10 +12,33 @@ class StorageManager {
 }
 
 class DownloadService {
+    /**
+     * Uruchamia pobieranie pliku i weryfikuje jego ukończenie przez chrome.downloads.onChanged
+     * @param {string} url 
+     * @param {string} filename 
+     * @returns {Promise<boolean>}
+     */
     static async trigger(url, filename) {
         return new Promise((resolve) => {
-            chrome.downloads.download({ url: url, filename: filename, saveAs: false }, () => {
-                resolve(!chrome.runtime.lastError);
+            chrome.downloads.download({ url: url, filename: filename, saveAs: false }, (downloadId) => {
+                if (chrome.runtime.lastError || !downloadId) {
+                    resolve(false);
+                    return;
+                }
+
+                // Nasłuchiwanie stanu pobierania w celu upewnienia się, że plik pobrał się całkowicie
+                const listener = (delta) => {
+                    if (delta.id === downloadId) {
+                        if (delta.state && delta.state.current === 'complete') {
+                            chrome.downloads.onChanged.removeListener(listener);
+                            resolve(true);
+                        } else if (delta.error || (delta.state && delta.state.current === 'interrupted')) {
+                            chrome.downloads.onChanged.removeListener(listener);
+                            resolve(false);
+                        }
+                    }
+                };
+                chrome.downloads.onChanged.addListener(listener);
             });
         });
     }
@@ -158,7 +181,6 @@ class GalleryUI {
         this.statSelected.textContent = `${selectedCount} selected`;
         
         this.selectAllCb.checked = visible.length > 0 && selectedCount === visible.length;
-        this.onSelectionCommandInternal = selectedCount;
         this.onSelectionChange(selectedCount);
     }
 
@@ -175,6 +197,11 @@ class DownloaderUI {
         this.batchFileInput = document.getElementById('batch-file');
         this.batchInfo = document.getElementById('batch-info');
         
+        // Elementy nowego paska postępu (v1.3)
+        this.statusText = document.getElementById('status-text');
+        this.progressPercent = document.getElementById('progress-percent');
+        this.progressFill = document.getElementById('progress-fill');
+
         this.batchUrls = [];
 
         this.gallery = new GalleryUI(document.getElementById('gallery'), (count) => {
@@ -205,6 +232,19 @@ class DownloaderUI {
         await this.extractImagesFromPage();
     }
 
+    /**
+     * Aktualizuje stan nowego paska postępu i komunikatu
+     * @param {string} text 
+     * @param {number} current 
+     * @param {number} total 
+     */
+    updateProgress(text, current, total) {
+        this.statusText.textContent = text;
+        const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+        this.progressPercent.textContent = `${percent}%`;
+        this.progressFill.style.width = `${percent}%`;
+    }
+
     async handleBatchFile(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -229,15 +269,16 @@ class DownloaderUI {
     async extractImagesFromBatchUrls() {
         try {
             this.downloadBtn.disabled = true;
-            this.downloadBtn.textContent = 'Skanowanie stron...';
+            this.updateProgress('Skanowanie stron wsadowych...', 0, this.batchUrls.length);
             const allImages = [];
 
+            let processed = 0;
             for (const url of this.batchUrls) {
+                processed++;
+                this.updateProgress(`Skanowanie: ${url}`, processed, this.batchUrls.length);
                 try {
-                    // Tworzymy ukrytą kartę do pobrania grafik ze wskazanych linków
                     const tab = await chrome.tabs.create({ url: url, active: false });
                     
-                    // Czekaj na załadowanie strony
                     await new Promise(resolve => {
                         const listener = (tabId, info) => {
                             if (tabId === tab.id && info.status === 'complete') {
@@ -248,7 +289,6 @@ class DownloaderUI {
                         chrome.tabs.onUpdated.addListener(listener);
                     });
 
-                    // Wstrzyknij skrypt ekstrakcji
                     const injectionResults = await chrome.scripting.executeScript({
                         target: { tabId: tab.id, allFrames: true },
                         files: ['content.js']
@@ -260,7 +300,6 @@ class DownloaderUI {
                         }
                     }
 
-                    // Zamknij tymczasową kartę
                     await chrome.tabs.remove(tab.id);
                 } catch (subErr) {
                     console.warn(`Nie udało się przetworzyć URL: ${url}`, subErr);
@@ -269,16 +308,22 @@ class DownloaderUI {
 
             this.gallery.setImages(allImages);
             this.handleFilterChange();
+            this.updateProgress('Zakończono skanowanie', 1, 1);
         } catch (e) {
             console.error('Błąd skanowania wsadowego:', e);
+            this.updateProgress('Błąd podczas skanowania', 0, 1);
         }
     }
 
     async extractImagesFromPage() {
-        if (this.batchUrls.length > 0) return; // Jeśli załadowano plik, pomijamy domyślną kartę
+        if (this.batchUrls.length > 0) return;
         try {
+            this.updateProgress('Skanowanie aktywnej karty...', 0, 1);
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!activeTab.url || activeTab.url.startsWith('chrome://')) return;
+            if (!activeTab.url || activeTab.url.startsWith('chrome://')) {
+                this.updateProgress('Nieobsługiwany URL strony', 1, 1);
+                return;
+            }
 
             const injectionResults = await chrome.scripting.executeScript({
                 target: { tabId: activeTab.id, allFrames: true },
@@ -292,8 +337,10 @@ class DownloaderUI {
             
             this.gallery.setImages(allImages);
             this.handleFilterChange();
+            this.updateProgress('Zakończono', 1, 1);
         } catch (e) {
             console.error('Błąd ekstrakcji:', e);
+            this.updateProgress('Błąd ekstrakcji grafik', 0, 1);
         }
     }
 
@@ -320,11 +367,15 @@ class DownloaderUI {
         if (selected.length === 0) return;
 
         this.downloadBtn.disabled = true;
-        this.downloadBtn.textContent = 'Pobieranie...';
+        this.updateProgress('Pobieranie (pasek ładowania)', 0, selected.length);
         const config = await StorageManager.loadConfig();
         
         let successCount = 0;
+        let index = 0;
         for (const item of selected) {
+            index++;
+            this.updateProgress(`Pobieranie (${index}/${selected.length})...`, index, selected.length);
+
             let downloadUrl = item.url;
             let filename = this.generateSafeFilename(item.url, config.subfolder);
             
@@ -336,14 +387,18 @@ class DownloaderUI {
                     console.warn('CORS błąd konwersji, pobieram oryginał');
                 }
             }
-            if (await DownloadService.trigger(downloadUrl, filename)) {
+            
+            const downloadedOk = await DownloadService.trigger(downloadUrl, filename);
+            if (downloadedOk) {
                 successCount++;
             }
         }
 
+        this.updateProgress('Zakończono', 1, 1);
         this.downloadBtn.textContent = `Pobrano: ${successCount}`;
         setTimeout(() => {
             this.gallery.updateStats();
+            this.downloadBtn.disabled = false;
         }, 3000);
     }
 
