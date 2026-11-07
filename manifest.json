@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Image Downloader Pro",
+  "version": "1.1",
+  "description": "Pobieranie zdjęć z aktywnych kart z zapamiętywaniem ustawień",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
