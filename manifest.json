@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Image Downloader Pro",
+  "name": "Pobieracz",
   "version": "1.1",
-  "description": "Pobieranie zdjęć z aktywnych kart z zapamiętywaniem ustawień",
+  "description": "Wtyczka do pobierania zdjęć z aktywnych kart i ramek",
   "permissions": [
     "activeTab",
     "scripting",
@@ -13,6 +13,12 @@
     "<all_urls>"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "icon.ico"
+  },
+  "icons": {
+    "16": "icon.ico",
+    "48": "icon.ico",
+    "128": "icon.ico"
   }
 }
