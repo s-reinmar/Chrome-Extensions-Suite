@@ -1,13 +1,6 @@
-        body { font-family: system-ui, -apple-system, sans-serif; width: 600px; height: 610px; display: flex; flex-direction: column; margin: 0; background: #f8f9fa; }
+        body { font-family: system-ui, -apple-system, sans-serif; width: 600px; height: 580px; display: flex; flex-direction: column; margin: 0; background: #f8f9fa; }
         .app-header-title { padding: 8px 12px; background: #007bff; color: white; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
         
-        /* Panel wsadowy TXT */
-        .batch-panel { padding: 8px 12px; background: #e3f2fd; border-bottom: 1px solid #bbdefb; display: flex; align-items: center; gap: 10px; font-size: 13px; }
-        .batch-panel label { background: #007bff; color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 12px; transition: background 0.2s; }
-        .batch-panel label:hover { background: #0056b3; }
-        .batch-panel input[type="file"] { display: none; }
-        .batch-info { color: #1565c0; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-
         .header { padding: 12px; background: white; border-bottom: 1px solid #dee2e6; flex-shrink: 0; }
         .filter-row { display: flex; align-items: center; margin-bottom: 10px; font-size: 13px; }
         .filter-label { width: 65px; font-weight: 500; }
@@ -43,7 +36,7 @@
         .image-card .dimensions { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; font-size: 10px; text-align: center; padding: 2px 0; }
         .image-card.hidden { display: none; }
 
-        /* Nowy pasek komunikatów i postępu (wersja 1.3) pod głównym oknem galerii */
+        /* Status Bar */
         .status-bar-container { background: white; padding: 8px 12px; border-top: 1px solid #dee2e6; flex-shrink: 0; font-size: 12px; }
         .status-message { margin-bottom: 4px; color: #495057; font-weight: 500; display: flex; justify-content: space-between; }
         .progress-bar-track { width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; position: relative; }

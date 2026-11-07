@@ -3,57 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Pobieracz v1.5</title>
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; width: 600px; height: 580px; display: flex; flex-direction: column; margin: 0; background: #f8f9fa; }
-        .app-header-title { padding: 8px 12px; background: #007bff; color: white; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
-        
-        .header { padding: 12px; background: white; border-bottom: 1px solid #dee2e6; flex-shrink: 0; }
-        .filter-row { display: flex; align-items: center; margin-bottom: 10px; font-size: 13px; }
-        .filter-label { width: 65px; font-weight: 500; }
-        
-        /* Dual Slider */
-        .slider-container { position: relative; width: 220px; height: 20px; margin: 0 10px; }
-        .slider-track { position: absolute; width: 100%; height: 6px; background: #e9ecef; top: 7px; border-radius: 3px; }
-        .slider-range { position: absolute; height: 6px; background: #007bff; top: 7px; border-radius: 3px; }
-        .slider-container input[type="range"] { 
-            position: absolute; width: 100%; top: 4px; margin: 0; -webkit-appearance: none; 
-            background: transparent; pointer-events: none; 
-        }
-        .slider-container input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; pointer-events: auto; width: 14px; height: 14px; background: #007bff; 
-            border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        }
-        
-        .val-display { width: 55px; text-align: right; color: #495057; font-variant-numeric: tabular-nums; }
-        .val-display-left { text-align: left; width: 55px; }
-
-        /* Stats Bar */
-        .stats-bar { display: flex; gap: 10px; padding-top: 10px; border-top: 1px dashed #dee2e6; margin-top: 10px; font-size: 13px; align-items: center; }
-        .stat-badge { padding: 4px 8px; border-radius: 4px; background: #e9ecef; border: 1px solid #ced4da; display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
-        .stat-badge.matching { border-color: #c3e6cb; background: #d4edda; color: #155724; }
-        .stat-badge.filtered { border-color: #d6d8db; background: #e2e3e5; color: #383d41; }
-        .stat-badge input[type="checkbox"] { margin: 0; cursor: pointer; }
-
-        /* Gallery */
-        .gallery-container { flex-grow: 1; overflow-y: auto; padding: 12px; background: #f1f3f5; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; align-content: start; }
-        .image-card { position: relative; border-radius: 6px; overflow: hidden; background: white; border: 2px solid transparent; cursor: pointer; transition: border-color 0.1s; height: 100px; display: flex; align-items: center; justify-content: center; }
-        .image-card.selected { border-color: #007bff; }
-        .image-card img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .image-card .dimensions { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; font-size: 10px; text-align: center; padding: 2px 0; }
-        .image-card.hidden { display: none; }
-
-        /* Status Bar */
-        .status-bar-container { background: white; padding: 8px 12px; border-top: 1px solid #dee2e6; flex-shrink: 0; font-size: 12px; }
-        .status-message { margin-bottom: 4px; color: #495057; font-weight: 500; display: flex; justify-content: space-between; }
-        .progress-bar-track { width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; position: relative; }
-        .progress-bar-fill { width: 0%; height: 100%; background: #28a745; transition: width 0.2s ease; }
-
-        .bottom-bar { display: flex; padding: 10px 12px; background: white; border-top: 1px solid #dee2e6; gap: 8px; flex-shrink: 0; }
-        .bottom-bar input, .bottom-bar select { border: 1px solid #ced4da; padding: 6px 10px; border-radius: 4px; font-size: 13px; flex: 1; outline: none; }
-        .bottom-bar button { background: #007bff; color: white; border: none; padding: 6px 16px; border-radius: 4px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-        .bottom-bar button:hover { background: #0056b3; }
-        .bottom-bar button:disabled { background: #6c757d; cursor: not-allowed; }
-    </style>
+    <link rel="stylesheet" href="css/popup.css">
 </head>
 <body>
     <div class="app-header-title">
