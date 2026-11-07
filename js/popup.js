@@ -12,12 +12,6 @@ class StorageManager {
 }
 
 class DownloadService {
-    /**
-     * Uruchamia pobieranie pliku i weryfikuje jego ukończenie przez chrome.downloads.onChanged
-     * @param {string} url 
-     * @param {string} filename 
-     * @returns {Promise<boolean>}
-     */
     static async trigger(url, filename) {
         return new Promise((resolve) => {
             chrome.downloads.download({ url: url, filename: filename, saveAs: false }, (downloadId) => {
@@ -26,7 +20,6 @@ class DownloadService {
                     return;
                 }
 
-                // Nasłuchiwanie stanu pobierania w celu upewnienia się, że plik pobrał się całkowicie
                 const listener = (delta) => {
                     if (delta.id === downloadId) {
                         if (delta.state && delta.state.current === 'complete') {
@@ -194,15 +187,10 @@ class DownloaderUI {
         this.subfolderInput = document.getElementById('subfolder');
         this.formatSelect = document.getElementById('format');
         this.downloadBtn = document.getElementById('download-btn');
-        this.batchFileInput = document.getElementById('batch-file');
-        this.batchInfo = document.getElementById('batch-info');
         
-        // Elementy nowego paska postępu (v1.3)
         this.statusText = document.getElementById('status-text');
         this.progressPercent = document.getElementById('progress-percent');
         this.progressFill = document.getElementById('progress-fill');
-
-        this.batchUrls = [];
 
         this.gallery = new GalleryUI(document.getElementById('gallery'), (count) => {
             this.downloadBtn.disabled = count === 0;
@@ -224,7 +212,6 @@ class DownloaderUI {
         this.subfolderInput.addEventListener('input', () => this.saveCurrentState());
         this.formatSelect.addEventListener('change', () => this.saveCurrentState());
         this.downloadBtn.addEventListener('click', () => this.executeDownload());
-        this.batchFileInput.addEventListener('change', (e) => this.handleBatchFile(e));
 
         this.widthSlider.setValues(config.minW, config.maxW);
         this.heightSlider.setValues(config.minH, config.maxH);
@@ -232,96 +219,18 @@ class DownloaderUI {
         await this.extractImagesFromPage();
     }
 
-    /**
-     * Aktualizuje stan nowego paska postępu i komunikatu
-     * @param {string} text 
-     * @param {number} current 
-     * @param {number} total 
-     */
-    updateProgress(text, current, total) {
+    updateProgress(text, percent) {
         this.statusText.textContent = text;
-        const percent = total > 0 ? Math.round((current / total) * 100) : 0;
         this.progressPercent.textContent = `${percent}%`;
         this.progressFill.style.width = `${percent}%`;
     }
 
-    async handleBatchFile(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        this.batchInfo.textContent = `Wczytywanie: ${file.name}...`;
-        try {
-            const text = await file.text();
-            this.batchUrls = text.split(/\r?\n/)
-                .map(line => line.trim())
-                .filter(line => line && !line.startsWith('#'));
-
-            this.batchInfo.textContent = `Załadowano URLs: ${this.batchUrls.length}`;
-            if (this.batchUrls.length > 0) {
-                await this.extractImagesFromBatchUrls();
-            }
-        } catch (err) {
-            console.error('Błąd parsowania pliku TXT:', err);
-            this.batchInfo.textContent = 'Błąd odczytu pliku!';
-        }
-    }
-
-    async extractImagesFromBatchUrls() {
-        try {
-            this.downloadBtn.disabled = true;
-            this.updateProgress('Skanowanie stron wsadowych...', 0, this.batchUrls.length);
-            const allImages = [];
-
-            let processed = 0;
-            for (const url of this.batchUrls) {
-                processed++;
-                this.updateProgress(`Skanowanie: ${url}`, processed, this.batchUrls.length);
-                try {
-                    const tab = await chrome.tabs.create({ url: url, active: false });
-                    
-                    await new Promise(resolve => {
-                        const listener = (tabId, info) => {
-                            if (tabId === tab.id && info.status === 'complete') {
-                                chrome.tabs.onUpdated.removeListener(listener);
-                                resolve(true);
-                            }
-                        };
-                        chrome.tabs.onUpdated.addListener(listener);
-                    });
-
-                    const injectionResults = await chrome.scripting.executeScript({
-                        target: { tabId: tab.id, allFrames: true },
-                        files: ['js/content.js']
-                    });
-
-                    if (injectionResults) {
-                        for (const frame of injectionResults) {
-                            if (frame.result) allImages.push(...frame.result);
-                        }
-                    }
-
-                    await chrome.tabs.remove(tab.id);
-                } catch (subErr) {
-                    console.warn(`Nie udało się przetworzyć URL: ${url}`, subErr);
-                }
-            }
-
-            this.gallery.setImages(allImages);
-            this.handleFilterChange();
-            this.updateProgress('Zakończono skanowanie', 1, 1);
-        } catch (e) {
-            console.error('Błąd skanowania wsadowego:', e);
-            this.updateProgress('Błąd podczas skanowania', 0, 1);
-        }
-    }
-
     async extractImagesFromPage() {
-        if (this.batchUrls.length > 0) return;
         try {
-            this.updateProgress('Skanowanie aktywnej karty...', 0, 1);
+            this.updateProgress('Skanowanie aktywnej karty...', 50);
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (!activeTab.url || activeTab.url.startsWith('chrome://')) {
-                this.updateProgress('Nieobsługiwany URL strony', 1, 1);
+                this.updateProgress('Nieobsługiwany URL strony', 100);
                 return;
             }
 
@@ -331,16 +240,18 @@ class DownloaderUI {
             });
 
             const allImages = [];
-            for (const frame of injectionResults) {
-                if (frame.result) allImages.push(...frame.result);
+            if (injectionResults) {
+                for (const frame of injectionResults) {
+                    if (frame.result) allImages.push(...frame.result);
+                }
             }
             
             this.gallery.setImages(allImages);
             this.handleFilterChange();
-            this.updateProgress('Zakończono', 1, 1);
+            this.updateProgress('Zakończono pomyślnie', 100);
         } catch (e) {
             console.error('Błąd ekstrakcji:', e);
-            this.updateProgress('Błąd ekstrakcji grafik', 0, 1);
+            this.updateProgress('Błąd ekstrakcji grafik', 100);
         }
     }
 
@@ -367,14 +278,13 @@ class DownloaderUI {
         if (selected.length === 0) return;
 
         this.downloadBtn.disabled = true;
-        this.updateProgress('Pobieranie (pasek ładowania)', 0, selected.length);
         const config = await StorageManager.loadConfig();
         
         let successCount = 0;
         let index = 0;
         for (const item of selected) {
             index++;
-            this.updateProgress(`Pobieranie (${index}/${selected.length})...`, index, selected.length);
+            this.updateProgress(`Pobieranie (${index}/${selected.length})...`, Math.round((index / selected.length) * 100));
 
             let downloadUrl = item.url;
             let filename = this.generateSafeFilename(item.url, config.subfolder);
@@ -394,7 +304,7 @@ class DownloaderUI {
             }
         }
 
-        this.updateProgress('Zakończono', 1, 1);
+        this.updateProgress('Zakończono pobieranie', 100);
         this.downloadBtn.textContent = `Pobrano: ${successCount}`;
         setTimeout(() => {
             this.gallery.updateStats();
