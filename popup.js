@@ -45,7 +45,6 @@ class DualSlider {
             let minVal = parseInt(this.minInput.value, 10);
             let maxVal = parseInt(this.maxInput.value, 10);
             
-            // Zabezpieczenie przed przecięciem suwaków
             if (minVal > maxVal) {
                 const tmp = minVal;
                 minVal = maxVal;
@@ -73,7 +72,6 @@ class DualSlider {
     setValues(min, max) {
         this.minInput.value = min; 
         this.maxInput.value = max;
-        // Wywołanie zdarzenia, aby przeliczyć pozycję paska wizualnego
         this.minInput.dispatchEvent(new Event('input'));
     }
 
@@ -160,6 +158,7 @@ class GalleryUI {
         this.statSelected.textContent = `${selectedCount} selected`;
         
         this.selectAllCb.checked = visible.length > 0 && selectedCount === visible.length;
+        this.onSelectionCommandInternal = selectedCount;
         this.onSelectionChange(selectedCount);
     }
 
@@ -173,7 +172,11 @@ class DownloaderUI {
         this.subfolderInput = document.getElementById('subfolder');
         this.formatSelect = document.getElementById('format');
         this.downloadBtn = document.getElementById('download-btn');
+        this.batchFileInput = document.getElementById('batch-file');
+        this.batchInfo = document.getElementById('batch-info');
         
+        this.batchUrls = [];
+
         this.gallery = new GalleryUI(document.getElementById('gallery'), (count) => {
             this.downloadBtn.disabled = count === 0;
             this.downloadBtn.textContent = count > 0 ? `Download (${count})` : 'Download';
@@ -194,15 +197,85 @@ class DownloaderUI {
         this.subfolderInput.addEventListener('input', () => this.saveCurrentState());
         this.formatSelect.addEventListener('change', () => this.saveCurrentState());
         this.downloadBtn.addEventListener('click', () => this.executeDownload());
+        this.batchFileInput.addEventListener('change', (e) => this.handleBatchFile(e));
 
-        // Najpierw ustaw suwaki, a potem pobierz i przefiltruj obrazy
         this.widthSlider.setValues(config.minW, config.maxW);
         this.heightSlider.setValues(config.minH, config.maxH);
 
         await this.extractImagesFromPage();
     }
 
+    async handleBatchFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        this.batchInfo.textContent = `Wczytywanie: ${file.name}...`;
+        try {
+            const text = await file.text();
+            this.batchUrls = text.split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'));
+
+            this.batchInfo.textContent = `Załadowano URLs: ${this.batchUrls.length}`;
+            if (this.batchUrls.length > 0) {
+                await this.extractImagesFromBatchUrls();
+            }
+        } catch (err) {
+            console.error('Błąd parsowania pliku TXT:', err);
+            this.batchInfo.textContent = 'Błąd odczytu pliku!';
+        }
+    }
+
+    async extractImagesFromBatchUrls() {
+        try {
+            this.downloadBtn.disabled = true;
+            this.downloadBtn.textContent = 'Skanowanie stron...';
+            const allImages = [];
+
+            for (const url of this.batchUrls) {
+                try {
+                    // Tworzymy ukrytą kartę do pobrania grafik ze wskazanych linków
+                    const tab = await chrome.tabs.create({ url: url, active: false });
+                    
+                    // Czekaj na załadowanie strony
+                    await new Promise(resolve => {
+                        const listener = (tabId, info) => {
+                            if (tabId === tab.id && info.status === 'complete') {
+                                chrome.tabs.onUpdated.removeListener(listener);
+                                resolve(true);
+                            }
+                        };
+                        chrome.tabs.onUpdated.addListener(listener);
+                    });
+
+                    // Wstrzyknij skrypt ekstrakcji
+                    const injectionResults = await chrome.scripting.executeScript({
+                        target: { tabId: tab.id, allFrames: true },
+                        files: ['content.js']
+                    });
+
+                    if (injectionResults) {
+                        for (const frame of injectionResults) {
+                            if (frame.result) allImages.push(...frame.result);
+                        }
+                    }
+
+                    // Zamknij tymczasową kartę
+                    await chrome.tabs.remove(tab.id);
+                } catch (subErr) {
+                    console.warn(`Nie udało się przetworzyć URL: ${url}`, subErr);
+                }
+            }
+
+            this.gallery.setImages(allImages);
+            this.handleFilterChange();
+        } catch (e) {
+            console.error('Błąd skanowania wsadowego:', e);
+        }
+    }
+
     async extractImagesFromPage() {
+        if (this.batchUrls.length > 0) return; // Jeśli załadowano plik, pomijamy domyślną kartę
         try {
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (!activeTab.url || activeTab.url.startsWith('chrome://')) return;
@@ -228,7 +301,6 @@ class DownloaderUI {
         this.saveCurrentState();
         const w = this.widthSlider.getValues();
         const h = this.heightSlider.getValues();
-        const config = StorageManager.loadConfig(); // lub bezpośrednio z inputów
         this.gallery.applyFilter({ minW: w.min, maxW: w.max, minH: h.min, maxH: h.max });
     }
 
