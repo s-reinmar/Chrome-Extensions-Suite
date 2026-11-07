@@ -11,40 +11,6 @@ class StorageManager {
     }
 }
 
-class DownloadService {
-    static async trigger(url, filename) {
-        return new Promise((resolve) => {
-            chrome.downloads.download({ url: url, filename: filename, saveAs: false }, (downloadId) => {
-                if (chrome.runtime.lastError || !downloadId) {
-                    resolve(false);
-                    return;
-                }
-
-                const listener = (delta) => {
-                    if (delta.id === downloadId) {
-                        if (delta.state && delta.state.current === 'complete') {
-                            chrome.downloads.onChanged.removeListener(listener);
-                            resolve(true);
-                        } else if (delta.error || (delta.state && delta.state.current === 'interrupted')) {
-                            chrome.downloads.onChanged.removeListener(listener);
-                            resolve(false);
-                        }
-                    }
-                };
-                chrome.downloads.onChanged.addListener(listener);
-            });
-        });
-    }
-}
-
-class ImageFilter {
-    static matches(img, config) {
-        const wValid = img.width >= config.minW && (config.maxW >= 3000 || img.width <= config.maxW);
-        const hValid = img.height >= config.minH && (config.maxH >= 3000 || img.height <= config.maxH);
-        return wValid && hValid;
-    }
-}
-
 class DualSlider {
     constructor(root, onChangeCallback) {
         this.minInput = root.querySelector('.min-input');
@@ -137,7 +103,10 @@ class GalleryUI {
 
     applyFilter(config) {
         this.images.forEach(item => {
-            const isMatch = ImageFilter.matches(item, config);
+            const isMatch = (
+                item.width >= config.minW && (config.maxW >= 3000 || item.width <= config.maxW) &&
+                item.height >= config.minH && (config.maxH >= 3000 || item.height <= config.maxH)
+            );
             if (isMatch) {
                 item.element.classList.remove('hidden');
             } else {
@@ -167,7 +136,7 @@ class GalleryUI {
     updateStats() {
         const visible = this.images.filter(i => !i.element.classList.contains('hidden'));
         const hiddenCount = this.images.length - visible.length;
-        const selectedCount = visible.filter(i => i.selected && !i.element.classList.contains('hidden')).length;
+        const selectedCount = visible.filter(i => i.selected).length;
 
         this.statMatching.textContent = `${visible.length} matching`;
         this.statFiltered.textContent = `${hiddenCount} filtered out`;
@@ -200,6 +169,7 @@ class DownloaderUI {
         this.widthSlider = new DualSlider(document.getElementById('width-filter'), () => this.handleFilterChange());
         this.heightSlider = new DualSlider(document.getElementById('height-filter'), () => this.handleFilterChange());
 
+        this.initListeners();
         this.init();
     }
 
@@ -209,14 +179,43 @@ class DownloaderUI {
         this.subfolderInput.value = config.subfolder || '';
         this.formatSelect.value = config.format || 'original';
 
-        this.subfolderInput.addEventListener('input', () => this.saveCurrentState());
-        this.formatSelect.addEventListener('change', () => this.saveCurrentState());
-        this.downloadBtn.addEventListener('click', () => this.executeDownload());
-
         this.widthSlider.setValues(config.minW, config.maxW);
         this.heightSlider.setValues(config.minH, config.maxH);
 
         await this.extractImagesFromPage();
+    }
+
+    initListeners() {
+        this.subfolderInput.addEventListener('input', () => this.saveCurrentState());
+        this.formatSelect.addEventListener('change', () => this.saveCurrentState());
+        this.downloadBtn.addEventListener('click', () => this.executeDownload());
+
+        // Nasłuchujemy komunikatów tła na żywo i aktualizujemy pasek postępu
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message.action === "fileDownloaded") {
+                const percent = Math.round((message.successCount / message.totalItems) * 100);
+                this.updateProgress(`Pobieranie w tle: ${message.successCount}/${message.totalItems}`, percent);
+
+                // Co 5 pobrań uruchamiamy efekt neonowo-żółty
+                if (message.successCount > 0 && message.successCount % 5 === 0) {
+                    this.triggerNeonEffect();
+                }
+            } else if (message.action === "downloadFinished") {
+                this.updateProgress('Zakończono pobieranie', 100);
+                this.downloadBtn.textContent = `Pobrano: ${message.successCount}`;
+                setTimeout(() => {
+                    this.gallery.updateStats();
+                    this.downloadBtn.disabled = false;
+                }, 3000);
+            }
+        });
+    }
+
+    triggerNeonEffect() {
+        this.downloadBtn.classList.add('neon-yellow-fx');
+        setTimeout(() => {
+            this.downloadBtn.classList.remove('neon-yellow-fx');
+        }, 600);
     }
 
     updateProgress(text, percent) {
@@ -280,55 +279,16 @@ class DownloaderUI {
         this.downloadBtn.disabled = true;
         const config = await StorageManager.loadConfig();
 
-        this.updateProgress('Zlecono pobieranie w tle...', 0);
+        this.updateProgress('Zlecono pobieranie w tle (0/' + selected.length + ')...', 0);
 
-        // Wysyłamy zadanie do tła (background.js)
         chrome.runtime.sendMessage({
             action: "startBackgroundDownload",
             items: selected,
             subfolder: config.subfolder
         }, (response) => {
             if (response && response.status === "started") {
-                this.updateProgress('Pobieranie trwa w tle (możesz zmienić kartę)', 50);
+                this.updateProgress(`Pobieranie w tle: 0/${selected.length}`, 0);
             }
-        });
-
-        // Nasłuchujemy powrotu z tła o zakończeniu
-        chrome.runtime.onMessage.addListener((message) => {
-            if (message.action === "downloadFinished") {
-                this.updateProgress('Zakończono pobieranie', 100);
-                this.downloadBtn.textContent = `Pobrano: ${message.successCount}`;
-                setTimeout(() => {
-                    this.gallery.updateStats();
-                    this.downloadBtn.disabled = false;
-                }, 3000);
-            }
-        });
-    }
-
-    generateSafeFilename(url, subfolder) {
-        try {
-            const urlObj = new URL(url);
-            let filename = (urlObj.pathname.split('/').filter(Boolean).pop() || '').split('?')[0].replace(/[<>:"/\\|?*]+/g, '_');
-            if (!filename || !filename.includes('.')) filename = `image_${Date.now()}.jpg`;
-            const cleanSub = (subfolder || '').trim().replace(/[<>:"/\\|?*]+/g, '_');
-            return cleanSub ? `${cleanSub}/${filename}` : filename;
-        } catch (e) { return `image_${Date.now()}.jpg`; }
-    }
-
-    async convertImageFormat(url, format) {
-        return new Promise((resolve, reject) => {
-            const img = new Image(); 
-            img.crossOrigin = "Anonymous"; 
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width; 
-                canvas.height = img.height;
-                canvas.getContext('2d').drawImage(img, 0, 0);
-                canvas.toBlob(b => b ? resolve(URL.createObjectURL(b)) : reject(), `image/${format}`);
-            };
-            img.onerror = reject; 
-            img.src = url;
         });
     }
 }

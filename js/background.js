@@ -1,6 +1,6 @@
 /**
  * @file background.js
- * @description Service Worker obsługujący pobieranie w tle, odporny na zmianę karty.
+ * @description Service Worker obsługujący pobieranie w tle z raportowaniem postępu.
  */
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -13,8 +13,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function processBackgroundDownloads(items, subfolder) {
     let successCount = 0;
+    const totalItems = items.length;
 
-    for (let i = 0; i < items.length; i++) {
+    for (let i = 0; i < totalItems; i++) {
         const item = items[i];
         const filename = generateSafeFilename(item.url, subfolder);
 
@@ -30,12 +31,19 @@ async function processBackgroundDownloads(items, subfolder) {
                         return;
                     }
 
-                    // Nasłuchujemy zakończenia pobierania konkretnego pliku
                     const listener = (delta) => {
                         if (delta.id === downloadId) {
                             if (delta.state && delta.state.current === 'complete') {
                                 chrome.downloads.onChanged.removeListener(listener);
                                 successCount++;
+                                
+                                // Raportujemy pojedynczy postęp wraz z licznikiem i całością
+                                chrome.runtime.sendMessage({
+                                    action: "fileDownloaded",
+                                    successCount: successCount,
+                                    totalItems: totalItems
+                                }).catch(() => {});
+
                                 resolve(true);
                             } else if (delta.error || (delta.state && delta.state.current === 'interrupted')) {
                                 chrome.downloads.onChanged.removeListener(listener);
@@ -51,7 +59,6 @@ async function processBackgroundDownloads(items, subfolder) {
         }
     }
 
-    // Informujemy popup (jeśli jest otwarty), że zakończono
     chrome.runtime.sendMessage({
         action: "downloadFinished",
         successCount: successCount
