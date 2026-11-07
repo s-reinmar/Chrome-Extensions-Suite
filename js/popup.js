@@ -279,37 +279,31 @@ class DownloaderUI {
 
         this.downloadBtn.disabled = true;
         const config = await StorageManager.loadConfig();
-        
-        let successCount = 0;
-        let index = 0;
-        for (const item of selected) {
-            index++;
-            this.updateProgress(`Pobieranie (${index}/${selected.length})...`, Math.round((index / selected.length) * 100));
 
-            let downloadUrl = item.url;
-            let filename = this.generateSafeFilename(item.url, config.subfolder);
-            
-            if (config.format !== 'original') {
-                try {
-                    downloadUrl = await this.convertImageFormat(item.url, config.format);
-                    filename = filename.replace(/\.[^/.]+$/, "") + "." + config.format;
-                } catch (e) { 
-                    console.warn('CORS błąd konwersji, pobieram oryginał');
-                }
-            }
-            
-            const downloadedOk = await DownloadService.trigger(downloadUrl, filename);
-            if (downloadedOk) {
-                successCount++;
-            }
-        }
+        this.updateProgress('Zlecono pobieranie w tle...', 0);
 
-        this.updateProgress('Zakończono pobieranie', 100);
-        this.downloadBtn.textContent = `Pobrano: ${successCount}`;
-        setTimeout(() => {
-            this.gallery.updateStats();
-            this.downloadBtn.disabled = false;
-        }, 3000);
+        // Wysyłamy zadanie do tła (background.js)
+        chrome.runtime.sendMessage({
+            action: "startBackgroundDownload",
+            items: selected,
+            subfolder: config.subfolder
+        }, (response) => {
+            if (response && response.status === "started") {
+                this.updateProgress('Pobieranie trwa w tle (możesz zmienić kartę)', 50);
+            }
+        });
+
+        // Nasłuchujemy powrotu z tła o zakończeniu
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message.action === "downloadFinished") {
+                this.updateProgress('Zakończono pobieranie', 100);
+                this.downloadBtn.textContent = `Pobrano: ${message.successCount}`;
+                setTimeout(() => {
+                    this.gallery.updateStats();
+                    this.downloadBtn.disabled = false;
+                }, 3000);
+            }
+        });
     }
 
     generateSafeFilename(url, subfolder) {
