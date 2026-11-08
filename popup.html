@@ -7,7 +7,7 @@
 </head>
 <body>
     <div class="app-header-title">
-        <span>📦 Pobieracz v1.5 (Aktywna Karta)</span>
+        <span>📦 Pobieracz v1.6 (Aktywna Karta)</span>
     </div>
     
     <div class="header">
@@ -66,6 +66,73 @@
         <button id="download-btn" disabled>Download</button>
     </div>
 
+    <!-- W sekcji .bottom-bar dodaj przycisk: -->
+<button id="open-meta-btn" class="meta-config-btn" title="Ustawienia metadanych (Tytuł, Tagi, Autorzy)">Metadane</button>
+
+<!-- Na końcu pliku przed </body> dodaj HTML modalu: -->
+<div id="meta-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <span>Ustawienia Szczegółów Pliku (Metadane Windows)</span>
+        </div>
+        <div class="modal-body">
+            <!-- Opis -->
+            <div class="modal-field">
+                <label for="meta-title">Tytuł</label>
+                <input type="text" id="meta-title" placeholder="np. Girl Power">
+            </div>
+            <div class="modal-field">
+                <label for="meta-rating">Klasyfikacja (0-5 gwiazdek)</label>
+                <select id="meta-rating">
+                    <option value="0">0 gwiazdek (Brak)</option>
+                    <option value="1">★☆☆☆☆ (1 gwiazdka)</option>
+                    <option value="2">★★☆☆☆ (2 gwiazdki)</option>
+                    <option value="3">★★★☆☆ (3 gwiazdki)</option>
+                    <option value="4">★★★★☆ (4 gwiazdki)</option>
+                    <option value="5">★★★★★ (5 gwiazdek)</option>
+                </select>
+            </div>
+            <div class="modal-field">
+                <label for="meta-tags">Tagi (oddzielone przecinkami)</label>
+                <input type="text" id="meta-tags" placeholder="np. Lineal, ikona, projekt">
+            </div>
+            <div class="modal-field">
+                <label for="meta-comments">Komentarze</label>
+                <input type="text" id="meta-comments" placeholder="Wpisz komentarz">
+            </div>
+
+            <!-- Pochodzenie -->
+            <div class="modal-field">
+                <label for="meta-authors">Autorzy</label>
+                <input type="text" id="meta-authors" placeholder="np. Smashicons">
+            </div>
+            <div class="modal-row-two">
+                <div class="modal-field">
+                    <label for="meta-date-taken">Data wykonania</label>
+                    <input type="date" id="meta-date-taken">
+                </div>
+                <div class="modal-field">
+                    <label for="meta-date-acquired">Data pozyskania</label>
+                    <input type="date" id="meta-date-acquired">
+                </div>
+            </div>
+            <div class="modal-field">
+                <label for="meta-software">Nazwa programu</label>
+                <input type="text" id="meta-software" placeholder="np. Photoshop / WebDownloader">
+            </div>
+            <div class="modal-field">
+                <label for="meta-copyright">Prawa autorskie</label>
+                <input type="text" id="meta-copyright" placeholder="np. © 2026 Wszelkie prawa zastrzeżone">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="meta-cancel-btn" class="btn-secondary">Anuluj</button>
+            <button id="meta-save-btn" class="btn-primary">Zapisz</button>
+        </div>
+    </div>
+</div>
+
     <script src="js/popup.js"></script>
+
 </body>
 </html>

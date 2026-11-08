@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Pobieracz",
-  "version": "1.5",
+  "version": "1.7",
   "description": "Wtyczka do pobierania zdjęć z aktywnej karty. Wersja stabilna, działająca niezależnie od aktywnej karty przeglądarki. Szybkość i niezależność!",
   "permissions": [
-    "activeTab",
-    "scripting",
     "downloads",
-    "storage"
+    "storage",
+    "scripting",
+    "activeTab"
   ],
   "host_permissions": [
     "<all_urls>"

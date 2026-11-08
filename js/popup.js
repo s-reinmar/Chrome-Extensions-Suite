@@ -1,8 +1,27 @@
+/**
+ * @file popup.js
+ * @description Główny skrypt interfejsu rozszerzenia (Popup) obsługujący filtry, galerię i rozszerzone metadane.
+ */
+
 class StorageManager {
     static async loadConfig() {
         return new Promise(resolve => {
             chrome.storage.local.get(['downloaderConfig'], (result) => {
-                resolve(result.downloaderConfig || { minW: 0, maxW: 3000, minH: 0, maxH: 3000, subfolder: '', format: 'original' });
+                resolve(result.downloaderConfig || { 
+                    minW: 0, maxW: 3000, minH: 0, maxH: 3000, 
+                    subfolder: '', format: 'original',
+                    metadata: { 
+                        title: '', 
+                        rating: '0', 
+                        tags: '', 
+                        comments: '', 
+                        authors: '', 
+                        dateTaken: '', 
+                        software: '', 
+                        dateAcquired: '', 
+                        copyright: '' 
+                    }
+                });
             });
         });
     }
@@ -157,6 +176,23 @@ class DownloaderUI {
         this.formatSelect = document.getElementById('format');
         this.downloadBtn = document.getElementById('download-btn');
         
+        // Elementy okienka modalnego
+        this.openMetaBtn = document.getElementById('open-meta-btn');
+        this.metaModal = document.getElementById('meta-modal');
+        this.metaCancelBtn = document.getElementById('meta-cancel-btn');
+        this.metaSaveBtn = document.getElementById('meta-save-btn');
+
+        // Pola metadanych
+        this.metaTitle = document.getElementById('meta-title');
+        this.metaRating = document.getElementById('meta-rating');
+        this.metaTags = document.getElementById('meta-tags');
+        this.metaComments = document.getElementById('meta-comments');
+        this.metaAuthors = document.getElementById('meta-authors');
+        this.metaDateTaken = document.getElementById('meta-date-taken');
+        this.metaSoftware = document.getElementById('meta-software');
+        this.metaDateAcquired = document.getElementById('meta-date-acquired');
+        this.metaCopyright = document.getElementById('meta-copyright');
+
         this.statusText = document.getElementById('status-text');
         this.progressPercent = document.getElementById('progress-percent');
         this.progressFill = document.getElementById('progress-fill');
@@ -179,6 +215,19 @@ class DownloaderUI {
         this.subfolderInput.value = config.subfolder || '';
         this.formatSelect.value = config.format || 'original';
 
+        // Ładowanie zapisanych metadanych
+        if (config.metadata) {
+            this.metaTitle.value = config.metadata.title || '';
+            this.metaRating.value = config.metadata.rating || '0';
+            this.metaTags.value = config.metadata.tags || '';
+            this.metaComments.value = config.metadata.comments || '';
+            this.metaAuthors.value = config.metadata.authors || '';
+            this.metaDateTaken.value = config.metadata.dateTaken || '';
+            this.metaSoftware.value = config.metadata.software || '';
+            this.metaDateAcquired.value = config.metadata.dateAcquired || '';
+            this.metaCopyright.value = config.metadata.copyright || '';
+        }
+
         this.widthSlider.setValues(config.minW, config.maxW);
         this.heightSlider.setValues(config.minH, config.maxH);
 
@@ -190,32 +239,27 @@ class DownloaderUI {
         this.formatSelect.addEventListener('change', () => this.saveCurrentState());
         this.downloadBtn.addEventListener('click', () => this.executeDownload());
 
-        // Nasłuchujemy komunikatów tła na żywo i aktualizujemy pasek postępu
-        chrome.runtime.onMessage.addListener((message) => {
-            if (message.action === "fileDownloaded") {
-                const percent = Math.round((message.successCount / message.totalItems) * 100);
-                this.updateProgress(`Pobieranie w tle: ${message.successCount}/${message.totalItems}`, percent);
+        if (this.openMetaBtn && this.metaModal) {
+            this.openMetaBtn.addEventListener('click', () => this.metaModal.classList.add('active'));
+            this.metaCancelBtn.addEventListener('click', () => this.metaModal.classList.remove('active'));
+            this.metaSaveBtn.addEventListener('click', () => {
+                this.saveCurrentState();
+                this.metaModal.classList.remove('active');
+            });
 
-                // Co 5 pobrań uruchamiamy efekt neonowo-żółty
-                if (message.successCount > 0 && message.successCount % 5 === 0) {
-                    this.triggerNeonEffect();
+            // Automatyczny zapis dla wszystkich pól
+            const inputs = [
+                this.metaTitle, this.metaRating, this.metaTags, this.metaComments,
+                this.metaAuthors, this.metaDateTaken, this.metaSoftware,
+                this.metaDateAcquired, this.metaCopyright
+            ];
+            inputs.forEach(input => {
+                if (input) {
+                    input.addEventListener('input', () => this.saveCurrentState());
+                    input.addEventListener('change', () => this.saveCurrentState());
                 }
-            } else if (message.action === "downloadFinished") {
-                this.updateProgress('Zakończono pobieranie', 100);
-                this.downloadBtn.textContent = `Pobrano: ${message.successCount}`;
-                setTimeout(() => {
-                    this.gallery.updateStats();
-                    this.downloadBtn.disabled = false;
-                }, 3000);
-            }
-        });
-    }
-
-    triggerNeonEffect() {
-        this.downloadBtn.classList.add('neon-yellow-fx');
-        setTimeout(() => {
-            this.downloadBtn.classList.remove('neon-yellow-fx');
-        }, 600);
+            });
+        }
     }
 
     updateProgress(text, percent) {
@@ -268,7 +312,18 @@ class DownloaderUI {
             minW: w.min, maxW: w.max, 
             minH: h.min, maxH: h.max,
             subfolder: this.subfolderInput.value.trim(), 
-            format: this.formatSelect.value
+            format: this.formatSelect.value,
+            metadata: {
+                title: this.metaTitle ? this.metaTitle.value.trim() : '',
+                rating: this.metaRating ? this.metaRating.value : '0',
+                tags: this.metaTags ? this.metaTags.value.trim() : '',
+                comments: this.metaComments ? this.metaComments.value.trim() : '',
+                authors: this.metaAuthors ? this.metaAuthors.value.trim() : '',
+                dateTaken: this.metaDateTaken ? this.metaDateTaken.value : '',
+                software: this.metaSoftware ? this.metaSoftware.value.trim() : '',
+                dateAcquired: this.metaDateAcquired ? this.metaDateAcquired.value : '',
+                copyright: this.metaCopyright ? this.metaCopyright.value.trim() : ''
+            }
         });
     }
 
@@ -279,17 +334,21 @@ class DownloaderUI {
         this.downloadBtn.disabled = true;
         const config = await StorageManager.loadConfig();
 
-        this.updateProgress('Zlecono pobieranie w tle (0/' + selected.length + ')...', 0);
+        this.progressFill.classList.add('active-loading');
+        this.updateProgress(`Pobieranie ${selected.length} plików w tle...`, 100);
 
         chrome.runtime.sendMessage({
             action: "startBackgroundDownload",
             items: selected,
-            subfolder: config.subfolder
-        }, (response) => {
-            if (response && response.status === "started") {
-                this.updateProgress(`Pobieranie w tle: 0/${selected.length}`, 0);
-            }
+            subfolder: config.subfolder,
+            metadata: config.metadata
         });
+
+        setTimeout(() => {
+            this.downloadBtn.disabled = false;
+            this.downloadBtn.textContent = `Pobrano (${selected.length})`;
+            this.progressFill.classList.remove('active-loading');
+        }, 1500);
     }
 }
 
