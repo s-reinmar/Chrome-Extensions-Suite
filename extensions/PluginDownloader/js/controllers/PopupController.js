@@ -1,6 +1,6 @@
 /**
  * @file PopupController.js
- * @description Główny kontroler MVC orkiestrujący modele, widoki i serwisy wtyczki.
+ * @description Główny kontroler MVC wtyczki. Obsługuje import linków, skanowanie DOM i rygorystyczne filtry.
  */
 
 import { StorageService } from '../services/StorageService.js';
@@ -30,28 +30,22 @@ export class PopupController {
     this.downloadOptionsView = downloadOptionsView;
     this.metadataModalView = metadataModalView;
 
-    /** @type {DualSlider|null} */
     this.widthSlider = null;
-    /** @type {DualSlider|null} */
     this.heightSlider = null;
+    this.saveDebounceTimer = null;
   }
 
-  /**
-   * Inicjalizacja całej aplikacji Popup.
-   * @returns {Promise<void>}
-   */
   async init() {
     this.#initSliders();
     this.#bindListeners();
+    this.#bindHeaderActions();
 
+    // 1. Wczytanie zapisanych zakresów suwaków ze storage
     await this.#loadStoredConfiguration();
+    // 2. Bezpośrednie przeskanowanie karty i zastosowanie filtrów
     await this.#executeScan();
   }
 
-  /**
-   * Inicjalizuje komponenty suwaków dla szerokości i wysokości.
-   * @private
-   */
   #initSliders() {
     const widthEl = document.getElementById('width-filter');
     const heightEl = document.getElementById('height-filter');
@@ -64,24 +58,64 @@ export class PopupController {
     }
   }
 
-  /**
-   * Rejestruje obsługę zdarzeń z poszczególnych widoków.
-   * @private
-   */
   #bindListeners() {
-    // Zdarzenia opcji pobierania
-    this.downloadOptionsView.onChange = () => this.#saveCurrentState();
+    this.downloadOptionsView.onChange = () => this.#saveCurrentStateDebounced();
     this.downloadOptionsView.onDownloadClick = () => this.#handleDownload();
 
-    // Zdarzenia formularza metadanych
-    this.metadataModalView.onChange = () => this.#saveCurrentState();
-    this.metadataModalView.onSave = () => this.#saveCurrentState();
+    this.metadataModalView.onChange = () => this.#saveCurrentStateDebounced();
+    this.metadataModalView.onSave = () => this.#saveCurrentStateDebounced();
   }
 
-  /**
-   * Ładuje zapisaną konfigurację i synchronizuje widoki.
-   * @private
-   */
+  #bindHeaderActions() {
+    // Import linków z pliku zewnętrznego (.txt, .json, .csv)
+    const importBtn = document.getElementById('btn-import-urls');
+    const fileInput = document.getElementById('file-url-importer');
+
+    importBtn?.addEventListener('click', () => fileInput?.click());
+
+    fileInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        this.progressView.setProgress('Wczytywanie pliku...', 30);
+        const text = await file.text();
+        let urls = [];
+
+        if (file.name.endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          urls = Array.isArray(parsed) ? parsed : Object.values(parsed);
+        } else {
+          urls = text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('http://') || line.startsWith('https://'));
+        }
+
+        const items = urls.map((url) => {
+          const clean = url.split('?')[0].toLowerCase();
+          const ext = clean.split('.').pop() || 'PNG';
+          return {
+            url,
+            width: 512,
+            height: 512,
+            format: ext.slice(0, 4).toUpperCase()
+          };
+        });
+
+        this.model.setImages(items);
+        this.galleryView.renderImages(this.model.getAllItems());
+        this.#applyCurrentFilters();
+        this.progressView.setProgress(`Wczytano ${items.length} linków`, 100);
+      } catch (err) {
+        console.error('[POBIERACZ] Błąd importu:', err);
+        this.progressView.setProgress('Błąd parsowania pliku', 100);
+      } finally {
+        fileInput.value = '';
+      }
+    });
+  }
+
   async #loadStoredConfiguration() {
     const config = await StorageService.loadConfig();
 
@@ -96,13 +130,9 @@ export class PopupController {
     }
   }
 
-  /**
-   * Wykonuje skanowanie aktywnej karty i zasila model danymi.
-   * @private
-   */
   async #executeScan() {
     try {
-      this.progressView.setProgress('Skanowanie aktywnej karty...', 50);
+      this.progressView.setProgress('Skanowanie karty...', 50);
 
       const rawImages = await ScannerService.scanActiveTab();
       this.model.setImages(rawImages);
@@ -110,27 +140,20 @@ export class PopupController {
       this.galleryView.renderImages(this.model.getAllItems());
       this.#applyCurrentFilters();
 
-      this.progressView.setProgress('Zakończono pomyślnie', 100);
+      const stats = this.model.getStats();
+      this.progressView.setProgress(`Znaleziono ${stats.total} grafik (${stats.visible} w filtrze)`, 100);
     } catch (err) {
-      console.error('Błąd podczas skanowania:', err);
-      const msg = err instanceof Error ? err.message : 'Błąd ekstrakcji grafik';
+      console.error('[POBIERACZ] Błąd skanowania:', err);
+      const msg = err instanceof Error ? err.message : 'Błąd skanowania';
       this.progressView.setProgress(msg, 100);
     }
   }
 
-  /**
-   * Obsługa zmiany zakresu suwaków wymiarów.
-   * @private
-   */
   #handleFilterChange() {
-    this.#saveCurrentState();
+    this.#saveCurrentStateDebounced();
     this.#applyCurrentFilters();
   }
 
-  /**
-   * Filtruje stan modelu i odświeża widok galerii oraz statystyki.
-   * @private
-   */
   #applyCurrentFilters() {
     const w = this.widthSlider ? this.widthSlider.getValues() : { min: 0, max: 3000 };
     const h = this.heightSlider ? this.heightSlider.getValues() : { min: 0, max: 3000 };
@@ -145,10 +168,6 @@ export class PopupController {
     this.#syncGalleryUI();
   }
 
-  /**
-   * Synchronizuje wygląd miniaturek i liczników na podstawie stanu modelu.
-   * @private
-   */
   #syncGalleryUI() {
     const items = this.model.getAllItems();
     const stats = this.model.getStats();
@@ -158,35 +177,23 @@ export class PopupController {
     this.downloadOptionsView.updateDownloadButton(stats.selected);
   }
 
-  /**
-   * Obsługa kliknięcia kafelka obrazu.
-   * @param {string} id
-   */
   onCardClick(id) {
     this.model.toggleSelection(id);
     this.#syncGalleryUI();
   }
 
-  /**
-   * Obsługa zaznaczenia / odznaczenia wszystkich widocznych grafik.
-   * @param {boolean} checked
-   */
   onSelectAllToggle(checked) {
     this.model.selectAllVisible(checked);
     this.#syncGalleryUI();
   }
 
-  /**
-   * Wykonuje proces pobierania zaznaczonych plików w tle.
-   * @private
-   */
   async #handleDownload() {
     const selected = this.model.getSelectedImages();
     if (selected.length === 0) return;
 
     this.downloadOptionsView.setButtonState(true);
     this.progressView.setLoading(true);
-    this.progressView.setProgress(`Pobieranie ${selected.length} plików w tle...`, 100);
+    this.progressView.setProgress(`Pobieranie ${selected.length} plików...`, 100);
 
     const options = this.downloadOptionsView.getValues();
     const metadata = this.metadataModalView.getValues();
@@ -203,17 +210,22 @@ export class PopupController {
         this.progressView.setLoading(false);
       }, 1500);
     } catch (err) {
-      console.error('Błąd pobierania:', err);
+      console.error('[POBIERACZ] Błąd pobierania:', err);
       this.downloadOptionsView.setButtonState(false, 'Błąd pobierania');
       this.progressView.setLoading(false);
       this.progressView.setProgress('Błąd pobierania w tle', 100);
     }
   }
 
-  /**
-   * Trwale zapisuje stan konfiguracji w chrome.storage.local.
-   * @private
-   */
+  #saveCurrentStateDebounced() {
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+    }
+    this.saveDebounceTimer = setTimeout(() => {
+      this.#saveCurrentState();
+    }, 300);
+  }
+
   #saveCurrentState() {
     const w = this.widthSlider ? this.widthSlider.getValues() : { min: 0, max: 3000 };
     const h = this.heightSlider ? this.heightSlider.getValues() : { min: 0, max: 3000 };

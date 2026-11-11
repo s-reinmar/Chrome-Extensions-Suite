@@ -48,8 +48,8 @@ export class DualSlider {
    */
   #bindEvents() {
     const handleUpdate = () => {
-      let minVal = parseInt(this.minInput.value, 10);
-      let maxVal = parseInt(this.maxInput.value, 10);
+      let minVal = parseInt(this.minInput.value, 10) || 0;
+      let maxVal = parseInt(this.maxInput.value, 10) || 3000;
 
       // Zapobieganie przecięciu wartości min i max
       if (minVal > maxVal) {
@@ -60,34 +60,57 @@ export class DualSlider {
         this.maxInput.value = String(maxVal);
       }
 
-      const maxLimit = parseInt(this.maxInput.max, 10) || 3000;
-      this.minDisplay.textContent = `${minVal}px`;
-      this.maxDisplay.textContent = maxVal >= maxLimit ? 'MAX' : `${maxVal}px`;
-
-      const minPercent = (minVal / maxLimit) * 100;
-      const maxPercent = (maxVal / maxLimit) * 100;
-
-      this.rangeVisual.style.left = `${minPercent}%`;
-      this.rangeVisual.style.width = `${maxPercent - minPercent}%`;
+      this.#updateDisplay(minVal, maxVal);
 
       if (typeof this.onChange === 'function') {
         this.onChange(this.getValues());
       }
     };
-    
+
     this.minInput.addEventListener('input', handleUpdate);
     this.maxInput.addEventListener('input', handleUpdate);
   }
 
   /**
-   * Ustawia wartości suwaków i synchronizuje widok.
+   * Aktualizuje pozycję wizualną i etykiety tekstowe.
+   * @private
+   */
+  #updateDisplay(minVal, maxVal) {
+    const maxLimit = parseInt(this.maxInput.max, 10) || 3000;
+    const minLimit = parseInt(this.minInput.min, 10) || 0;
+    const range = maxLimit - minLimit || 3000;
+
+    if (this.minDisplay) {
+      this.minDisplay.textContent = `${minVal}px`;
+    }
+    if (this.maxDisplay) {
+      this.maxDisplay.textContent = maxVal >= maxLimit ? 'MAX' : `${maxVal}px`;
+    }
+
+    if (this.rangeVisual) {
+      const minPercent = Math.max(0, Math.min(100, ((minVal - minLimit) / range) * 100));
+      const maxPercent = Math.max(0, Math.min(100, ((maxVal - minLimit) / range) * 100));
+      this.rangeVisual.style.left = `${minPercent}%`;
+      this.rangeVisual.style.width = `${Math.max(0, maxPercent - minPercent)}%`;
+    }
+  }
+
+  /**
+   * Ustawia wartości suwaków i synchronizuje widok bez zapętlania zdarzeń.
    * @param {number} min
    * @param {number} max
    */
   setValues(min, max) {
-    this.minInput.value = String(min);
-    this.maxInput.value = String(max);
-    this.minInput.dispatchEvent(new Event('input'));
+    const minLimit = parseInt(this.minInput.min, 10) || 0;
+    const maxLimit = parseInt(this.maxInput.max, 10) || 3000;
+
+    const safeMin = Math.max(minLimit, Math.min(maxLimit, Number(min) || 0));
+    const safeMax = Math.max(safeMin, Math.min(maxLimit, Number(max) || maxLimit));
+
+    this.minInput.value = String(safeMin);
+    this.maxInput.value = String(safeMax);
+
+    this.#updateDisplay(safeMin, safeMax);
   }
 
   /**
@@ -96,8 +119,8 @@ export class DualSlider {
    */
   getValues() {
     return {
-      min: parseInt(this.minInput.value, 10),
-      max: parseInt(this.maxInput.value, 10)
+      min: parseInt(this.minInput.value, 10) || 0,
+      max: parseInt(this.maxInput.value, 10) || 3000
     };
   }
 }

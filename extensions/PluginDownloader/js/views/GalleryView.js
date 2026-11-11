@@ -1,6 +1,6 @@
 /**
  * @file GalleryView.js
- * @description Warstwa widoku siatki grafik, checkboxa 'Zaznacz wszystkie' i liczników.
+ * @description Widok siatki kafelków, etykiet wymiarów, formatów oraz statystyk.
  */
 
 export class GalleryView {
@@ -24,12 +24,7 @@ export class GalleryView {
     this.#bindEvents(onCardClick, onSelectAllToggle);
   }
 
-  /**
-   * Rejestruje delegację zdarzeń dla siatki miniatur i checkboxa głównego.
-   * @private
-   */
   #bindEvents(onCardClick, onSelectAllToggle) {
-    // Efektywna delegacja zdarzeń zamiast pojedynczych listenerów na każdym kafelku
     this.container.addEventListener('click', (event) => {
       const target = /** @type {HTMLElement} */ (event.target);
       const card = target.closest('.image-card');
@@ -45,7 +40,7 @@ export class GalleryView {
   }
 
   /**
-   * Renderuje karty obrazów w kontenerze przy użyciu DocumentFragment.
+   * Przebudowuje siatkę miniaturek od zera.
    * @param {import('../models/ImageModel.js').GalleryItem[]} items
    */
   renderImages(items) {
@@ -57,7 +52,8 @@ export class GalleryView {
       card.className = `image-card ${item.selected ? 'selected' : ''}`;
       card.dataset.id = item.id;
       card.innerHTML = `
-        <img src="${item.url}" loading="lazy" alt="Image thumbnail">
+        <span class="format-badge">${item.format || 'IMG'}</span>
+        <img src="${item.url}" loading="lazy" alt="Miniatura">
         <div class="dimensions">${item.width}x${item.height}</div>
       `;
       fragment.appendChild(card);
@@ -67,32 +63,31 @@ export class GalleryView {
   }
 
   /**
-   * Aktualizuje widoczność i stan kafelków na podstawie modelu bez ponownego generowania DOM.
+   * Aktualizuje widoczność i zaznaczenie istniejących kafelków.
    * @param {import('../models/ImageModel.js').GalleryItem[]} items
    */
   updateCardStates(items) {
-  const cardMap = new Map();
-  this.container.querySelectorAll('.image-card').forEach((el) => {
-    if (el.dataset.id) cardMap.set(el.dataset.id, el);
-  });
+    const cardMap = new Map();
+    this.container.querySelectorAll('.image-card').forEach((el) => {
+      const card = /** @type {HTMLElement} */ (el);
+      if (card.dataset.id) cardMap.set(card.dataset.id, card);
+    });
 
-  items.forEach((item) => {
-    const card = cardMap.get(item.id);
-    if (!card) return;
+    items.forEach((item) => {
+      const card = cardMap.get(item.id);
+      if (!card) return;
 
-    card.classList.toggle('hidden', !item.isVisible);
-    card.classList.toggle('selected', item.selected);
+      card.classList.toggle('hidden', !item.isVisible);
+      card.classList.toggle('selected', item.selected);
 
-    // Aktualizacja napisu pikseli na kafelku
-    const dimEl = card.querySelector('.dimensions');
-    if (dimEl) {
-      dimEl.textContent = `${item.width}x${item.height}`;
-    }
-  });
-}
+      const dim = card.querySelector('.dimensions');
+      if (dim) {
+        dim.textContent = `${item.width}x${item.height}`;
+      }
+    });
+  }
 
   /**
-   * Aktualizuje etykiety statystyk oraz stan checkboxa "zaznacz wszystkie".
    * @param {import('../models/ImageModel.js').GalleryStats} stats
    */
   updateStats(stats) {

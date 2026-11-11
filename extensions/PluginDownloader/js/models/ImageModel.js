@@ -1,6 +1,7 @@
 /**
  * @file ImageModel.js
- * @description Headless model danych zarządzający stanem grafik, selekcją i filtrowaniem.
+ * @description Headless model danych. Realizuje rygorystyczne filtrowanie po pikselach,
+ * odcinając miniatury 128x128 oraz śmieci, gdy ustawiony jest wyższy zakres (np. 512x512).
  */
 
 /**
@@ -8,6 +9,7 @@
  * @property {string} url
  * @property {number} width
  * @property {number} height
+ * @property {string} format
  */
 
 /**
@@ -16,6 +18,7 @@
  * @property {string} url
  * @property {number} width
  * @property {number} height
+ * @property {string} format
  * @property {boolean} selected
  * @property {boolean} isVisible
  */
@@ -40,48 +43,46 @@ export class ImageModel {
   /** @type {GalleryItem[]} */
   #items = [];
 
-  /**
-   * Zapisuje pobrane obrazy z deduplikacją po adresie URL.
-   * @param {RawImageItem[]} rawImages
-   */
   setImages(rawImages) {
-  const uniqueUrls = new Set();
-  this.#items = [];
+    const uniqueUrls = new Set();
+    this.#items = [];
 
-  rawImages.forEach((img, idx) => {
-    if (!img.url || uniqueUrls.has(img.url)) return;
-    uniqueUrls.add(img.url);
+    rawImages.forEach((img, idx) => {
+      if (!img.url || uniqueUrls.has(img.url)) return;
+      uniqueUrls.add(img.url);
 
-    this.#items.push({
-      id: `img_${idx}_${Date.now()}`,
-      url: img.url,
-      width: Number(img.width) || 0,
-      height: Number(img.height) || 0,
-      selected: true,
-      isVisible: true // upewnij się, że początkowo są widoczne
+      this.#items.push({
+        id: `img_${idx}_${Date.now()}`,
+        url: img.url,
+        width: Number(img.width) || 0,
+        height: Number(img.height) || 0,
+        format: (img.format || 'IMG').toUpperCase(),
+        selected: true,
+        isVisible: true
+      });
     });
-  });
-}
+  }
 
-/**
-   * Filtruje elementy według podanych zakresów pikseli.
-   * @param {{ minW: number, maxW: number, minH: number, maxH: number }} filter
+  /**
+   * Ścisłe filtrowanie po pikselach.
+   * Jeśli suwak minW to np. 480, to obraz 128px trafia do filtered out.
+   * Obraz 512px mieści się w przedziale 480 - 840 i jest widoczny.
+   * @param {DimensionFilter} filter
    */
   applyFilter({ minW, maxW, minH, maxH }) {
+    const effectiveMinW = Number(minW) || 0;
+    const effectiveMaxW = Number(maxW) || 3000;
+    const effectiveMinH = Number(minH) || 0;
+    const effectiveMaxH = Number(maxH) || 3000;
+
     this.#items.forEach((item) => {
-      // Jeśli maxW/maxH to 3000 (czyli MAX), nie ograniczamy górnego pułapu
-      const matchWidth = item.width >= minW && (maxW >= 3000 || item.width <= maxW);
-      const matchHeight = item.height >= minH && (maxH >= 3000 || item.height <= maxH);
+      const matchWidth = item.width >= effectiveMinW && (effectiveMaxW >= 3000 || item.width <= effectiveMaxW);
+      const matchHeight = item.height >= effectiveMinH && (effectiveMaxH >= 3000 || item.height <= effectiveMaxH);
 
       item.isVisible = matchWidth && matchHeight;
     });
   }
 
-  /**
-   * Zmienia stan zaznaczenia pojedynczego elementu o ile jest widoczny.
-   * @param {string} id
-   * @returns {boolean} Nowy stan zaznaczenia lub false jeśli nie znaleziono.
-   */
   toggleSelection(id) {
     const item = this.#items.find((i) => i.id === id);
     if (item && item.isVisible) {
@@ -91,10 +92,6 @@ export class ImageModel {
     return false;
   }
 
-  /**
-   * Zaznacza lub odznacza wszystkie aktualnie widoczne elementy.
-   * @param {boolean} forceSelect
-   */
   selectAllVisible(forceSelect) {
     this.#items.forEach((item) => {
       if (item.isVisible) {
@@ -103,26 +100,14 @@ export class ImageModel {
     });
   }
 
-  /**
-   * Zwraca tylko widoczne elementy wybrane do pobrania.
-   * @returns {GalleryItem[]}
-   */
   getSelectedImages() {
     return this.#items.filter((item) => item.isVisible && item.selected);
   }
 
-  /**
-   * Zwraca kopię wszystkich elementów w modelu.
-   * @returns {GalleryItem[]}
-   */
   getAllItems() {
     return [...this.#items];
   }
 
-  /**
-   * Oblicza bieżące statystyki widoczności i zaznaczeń.
-   * @returns {GalleryStats}
-   */
   getStats() {
     const visibleCount = this.#items.filter((i) => i.isVisible).length;
     const selectedCount = this.#items.filter((i) => i.isVisible && i.selected).length;
