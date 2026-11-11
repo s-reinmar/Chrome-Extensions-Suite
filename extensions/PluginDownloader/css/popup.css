@@ -34,7 +34,7 @@ body { font-family: system-ui, -apple-system, sans-serif; width: 600px; height: 
 .image-card.selected { border-color: #007bff; }
 .image-card img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .image-card .dimensions { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); color: white; font-size: 10px; text-align: center; padding: 2px 0; }
-.image-card.hidden { display: none; }
+.image-card.hidden { display: none !important; }
 
 /* Status Bar */
 .status-bar-container { background: white; padding: 8px 12px; border-top: 1px solid #dee2e6; flex-shrink: 0; font-size: 12px; }
